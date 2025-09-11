@@ -10,7 +10,7 @@ HEADERS = {
     "User-Agent": "GoodWikiUsersRevisions/1.0 (caior@example.com)"
 }
 
-def make_request(title, rvstart="2017-01-01T00:00:00Z") -> list[dict]:
+def make_request(title, rvstart="2023-01-01T00:00:00Z", rvend="2023-09-04T00:00:00Z") -> list[dict]:
     S = requests.Session()
     PARAMS = {
         "action": "query",
@@ -20,11 +20,13 @@ def make_request(title, rvstart="2017-01-01T00:00:00Z") -> list[dict]:
         "rvslots": "main",
         "formatversion": "2",
         "format": "json",
-        "rvlimit": "max",
-        "rvstart": rvstart
+        "rvlimit": 50,
+        "rvend": rvstart
+
     }
     response = S.get(URL, headers=HEADERS, params=PARAMS)
     data = response.json()
+    print(data)
     revisions = data["query"]["pages"][0].get("revisions", [])
     return revisions
 
@@ -68,13 +70,13 @@ def get_revisions_data(start_idx, end_idx, checkpoint):
             
             elif curr_idx == len(revisions):
                 lastRev = revisions[-1]["timestamp"]
-                revisions = make_request(title, rvstart=lastRev)
+                revisions = make_request(title, rvend=lastRev)
                 curr_idx = 0
                 if len(revisions) == 0:
                     break
             
 
-            elif revisions[curr_idx]["timestamp"] < "2017-01-01T00:00:00Z":
+            elif revisions[curr_idx]["timestamp"] < "2023-01-01T00:00:00Z":
                 lastFound = True
             else:
                 rev = revisions[curr_idx]
@@ -92,12 +94,13 @@ def get_revisions_data(start_idx, end_idx, checkpoint):
             revisions_data = []  # Clear the list after saving
 
 
+if __name__ == "__main__":
+    # parser = argparse.ArgumentParser(description="Fetch Wikipedia revisions data.")
+    # parser.add_argument("--start_idx", type=int, required=True, help="Starting index of pages to process.")
+    # parser.add_argument("--end_idx", type=int, required=True, help="Ending index (exclusive) of pages to process.")
+    # parser.add_argument("--checkpoint", type=int, default=1000, help="Number of pages to process before saving data.")
+    # args = parser.parse_args()
+    print("Oi")
+    get_revisions_data(0, 10, 5)
 
-    if __name__ == "__main__":
-        parser = argparse.ArgumentParser(description="Fetch Wikipedia revisions data.")
-        parser.add_argument("--start_idx", type=int, required=True, help="Starting index of pages to process.")
-        parser.add_argument("--end_idx", type=int, required=True, help="Ending index (exclusive) of pages to process.")
-        parser.add_argument("--checkpoint", type=int, default=1000, help="Number of pages to process before saving data.")
-        args = parser.parse_args()
-        print("Oi")
-        get_revisions_data(args.start_idx, args.end_idx, args.checkpoint)
+    # get_revisions_data(args.start_idx, args.end_idx, args.checkpoint)
