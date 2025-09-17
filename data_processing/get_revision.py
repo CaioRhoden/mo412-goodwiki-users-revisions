@@ -2,6 +2,7 @@ from turtle import st
 import polars as pl
 import requests
 import argparse
+import datetime
 
 DATA_PATH = "../data/09_04_2023_v1.parquet"
 SAVING_PATH = "../data"
@@ -10,7 +11,7 @@ HEADERS = {
     "User-Agent": "GoodWikiUsersRevisions/1.0 (caior@example.com)"
 }
 
-def make_request(title, rvstart="2017-01-01T00:00:00Z") -> list[dict]:
+def make_request(title, rvstart="2023-01-01T00:00:00Z", rvend="2023-09-04T00:00:00Z") -> list[dict]:
     S = requests.Session()
     PARAMS = {
         "action": "query",
@@ -20,12 +21,17 @@ def make_request(title, rvstart="2017-01-01T00:00:00Z") -> list[dict]:
         "rvslots": "main",
         "formatversion": "2",
         "format": "json",
-        "rvlimit": "max",
-        "rvstart": rvstart
+        "rvlimit": 50,
+        "rvend": rvstart,
+        "rvstart": rvend
+
     }
     response = S.get(URL, headers=HEADERS, params=PARAMS)
     data = response.json()
-    revisions = data["query"]["pages"][0].get("revisions", [])
+    try:
+        revisions = data["query"]["pages"][0]["revisions"]
+    except (KeyError, IndexError):
+        revisions = []
     return revisions
 
 
@@ -46,7 +52,6 @@ def get_revisions_data(start_idx, end_idx, checkpoint):
     Returns:
         None
     """
-    print("oi")
     goodwiki = pl.read_parquet(DATA_PATH)
     revisions_data = []
 
@@ -58,31 +63,18 @@ def get_revisions_data(start_idx, end_idx, checkpoint):
 
         ### Get all revisions starting 2017-01-01
         revisions_list = []
-        curr_idx = 0
         lastFound = False
-
-
         while not lastFound:
-            if len(revisions) == 0:
-                break
-            
-            elif curr_idx == len(revisions):
-                lastRev = revisions[-1]["timestamp"]
-                revisions = make_request(title, rvstart=lastRev)
-                curr_idx = 0
-                if len(revisions) == 0:
-                    break
-            
-
-            elif revisions[curr_idx]["timestamp"] < "2017-01-01T00:00:00Z":
+            if len(revisions) < 50:
                 lastFound = True
-            else:
-                rev = revisions[curr_idx]
+            for rev in revisions:
                 rev["pageid"] = pageId
                 rev["title"] = title
                 revisions_list.append(rev)
-                curr_idx += 1
-        
+            if not lastFound:
+                rvend = revisions[-1]["timestamp"]
+                revisions = make_request(title, rvend=rvend)
+
         revisions_data.extend(revisions_list)
         print(f"Processed {row+1}/{len(goodwiki)}: {title} with {len(revisions_list)} revisions.")
         if (row + 1) % checkpoint == 0 or (row + 1) == end_idx:
@@ -92,12 +84,11 @@ def get_revisions_data(start_idx, end_idx, checkpoint):
             revisions_data = []  # Clear the list after saving
 
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Fetch Wikipedia revisions data.")
+    parser.add_argument("--start_idx", type=int, required=True, help="Starting index of pages to process.")
+    parser.add_argument("--end_idx", type=int, required=True, help="Ending index (exclusive) of pages to process.")
+    parser.add_argument("--checkpoint", type=int, default=1000, help="Number of pages to process before saving data.")
+    args = parser.parse_args()
 
-    if __name__ == "__main__":
-        parser = argparse.ArgumentParser(description="Fetch Wikipedia revisions data.")
-        parser.add_argument("--start_idx", type=int, required=True, help="Starting index of pages to process.")
-        parser.add_argument("--end_idx", type=int, required=True, help="Ending index (exclusive) of pages to process.")
-        parser.add_argument("--checkpoint", type=int, default=1000, help="Number of pages to process before saving data.")
-        args = parser.parse_args()
-        print("Oi")
-        get_revisions_data(args.start_idx, args.end_idx, args.checkpoint)
+    get_revisions_data(args.start_idx, args.end_idx, args.checkpoint)
